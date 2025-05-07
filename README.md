@@ -105,3 +105,53 @@ In this project, I will explain step by step how to create a reliable ESG scorin
     * [a. Use of Company Sustainability Reports](#a-use-of-company-sustainability-reports)
     * [b. Constant Information to Complement the LSTM Network Beyond the Cluster](#b-constant-information-to-complement-the-lstm-network-beyond-the-cluster)
 15. [BIBLIOGRAPHY](#15-bibliography)
+
+## 1. INTRODUCTION
+In recent years, environmental factors and social responsibility have gained significant importance in financial markets, driven by regulatory evolution, social norms, and the active role of institutional investors. The integration of ESG (Environmental, Social, and Governance) criteria into investment analysis processes has been supported by studies demonstrating their correlation with long-term company growth.
+
+However, measuring ESG performance remains a challenge, marked by opaque methodologies, heterogeneous criteria, and a lack of standardization in traditional ratings, in addition to their low update frequency.
+
+In this context, the processing of large volumes of unstructured information, such as financial news, emerges as a promising alternative, offering a more reactive and sensitive view of changes in corporate behavior. The application of Natural Language Processing (NLP) techniques facilitates the exploitation of this data, enabling the classification of texts, extraction of relevant information, and accurate sentiment assessment. Complementarily, Long Short-Term Memory (LSTM) recurrent neural network models have proven effective in time series prediction.
+
+This thesis focuses on the intersection of sustainability, quantitative finance, and artificial intelligence, with the primary objective of designing, implementing, and evaluating an investment algorithm based on ESG signals generated from news, as well as the issuance of dynamic ESG ratings. The proposed system includes:
+
+1.  An ESG classification and sentiment analysis module, using NLP models to identify relevant news and classify it according to its dimension (E, S, or G) and polarity.
+2.  An LSTM model that predicts a daily dynamic ESG score per company, capturing its temporal evolution based on the processed news.
+3.  A signal-based investment algorithm that uses these scores as input to generate buy or sell decisions, incorporating realistic execution aspects.
+
+The analysis is conducted on a sample of 30 companies from the S&P 500 index, equally distributed across six key economic sectors, aiming to ensure broad and diversified coverage of the US market.
+
+This project aims to contribute to both academia and professional practice, proposing a replicable and scalable approach for the integration of ESG criteria into automated investment processes.
+
+## 2. THEORETICAL FRAMEWORK
+This section delves into the fundamental concepts underpinning this work:
+
+### a. The Integration of ESG Criteria in Financial Markets
+This describes the increasing importance of ESG factors in financial markets, driven by regulation, demands from institutional investors, and evidence of their relationship with long-term profitability. It mentions the growth of assets managed under ESG criteria and the development of specialized financial products and rating agencies.
+
+### b. Limitations of Traditional ESG Ratings
+This analyzes the main criticisms of conventional ESG ratings, including the lack of methodological standardization among providers, low internal and external coherence, the limited transparency of methodologies, and the infrequent update cycles.
+
+### c. The Treatment of Unstructured Data as an ESG Alternative
+This presents the use of unstructured data, such as news, as an alternative and more dynamic source of information for ESG evaluation, capable of capturing relevant events with greater immediacy and offering diverse perspectives. It mentions the technical challenges associated with its processing, such as named entity recognition and sentiment analysis.
+
+### d. Natural Language Processing (NLP) for ESG Rating
+This introduces the field of NLP and its application in the ESG context, highlighting the advancement brought by pre-trained language models based on Transformer architectures. Key tasks such as topic classification and sentiment analysis are mentioned, along with how NLP allows for the transformation of textual information into quantifiable variables for predictive models.
+
+### e. Prediction of ESG Scores with LSTM Models
+This explains the use of Long Short-Term Memory (LSTM) recurrent neural network models to model the temporal evolution of ESG performance. The architecture of LSTMs and their ability to learn long-term dependencies are described, making them suitable for generating daily dynamic ESG scores from classified news.
+
+### f. Investment Strategies Based on ESG Signals
+This defines the concept of signals in quantitative investment systems and how ESG signals, constructed from dynamic scores generated by LSTM, can be used for buy or sell decisions. Examples of signal activation rules and the possibility of integrating complementary signals are mentioned.
+
+## 3. DATA EXTRACTION
+This section details the process of collecting the ESG news dataset used in this work, covering a 5-year period (March 2020 - March 2025).
+
+### a. Company and Sector Selection
+This describes the selection of 30 companies from the S&P 500 index, equally distributed across six key economic sectors: Healthcare, Technology, Energy, Financials, Communication Services, and Consumer Discretionary. The choice of this set is justified by its representativeness and the aim for sector diversity. The specific companies included in each sector are listed.
+
+### b. Sources Used and Justification
+This details the three main sources of information used:
+
+1.  **Quantexa API News (2023–2025):** Highlighting its named entity recognition (NER) capabilities and ESG thematic filters.
+2.  **NewsAPI (2020–2022):** Explaining the need to apply a subsequent filtering process using NER techniques (with the Spacy tool and the 'en\_core\_web\_sm' model) to correctly associate news with the selected companies.
