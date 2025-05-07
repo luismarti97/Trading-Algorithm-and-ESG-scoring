@@ -322,3 +322,174 @@ Although the model had been previously validated on the test set, a basic post-i
 
 * **Manual review of a sample:** A random subset of several news articles classified as ESG and non-ESG was selected for manual inspection.
 * **Thematic coherence:** The news labeled as ESG predominantly included relevant events such as sustainability initiatives,
+## 5. SECOND NLP MODEL
+Following the identification of news articles generally related to ESG factors using the first RoBERTa model, the next step involves a more granular classification of these news articles into one of the three traditional dimensions of ESG analysis: Environmental (E), Social (S), or Governance (G).
+
+This second classification is essential for subsequently constructing separate indicators, analyzing the evolution of each category.
+
+The task of assigning a news article to a specific ESG category presents several difficulties:
+
+* Many articles may address multiple aspects simultaneously (e.g., diversity policies within an environmental sustainability strategy).
+* Traditional keyword-based classification approaches are insufficient, as ESG concepts often appear implicitly or intertwined within the texts.
+* Accuracy and consistency in classification are critical to avoid biases in subsequent indicators.
+
+Notebook: 04\_LONGCHAIN:2.ipynb
+
+The method for creating the labeled sample is the same as in the first model: LangChain + OpenAI API (gpt-4o). All news articles previously labeled as ‘esg\_pred == 1’ (i.e., ESG-relevant) in the initial inference process are filtered, forming an initial working set.
+
+Subsequently, a random sample of 8,000 news articles is extracted, aiming for a sample size sufficient to capture thematic diversity and ensure a solid foundation for the training and validation of subsequent models. A structured prompt was developed instructing the model to act as an ESG analyst, providing clear definitions for each category:
+Each news article was evaluated individually, resulting in a categorical label (Environmental, Social, Governance) that was added as a new column in the DataFrame.
+
+### a. Model Architecture and Training
+Notebook: 05\_ROBERTA\_E\_S\_G.ipynb
+
+For this second classification task, the strategy of using a model based on the RoBERTa (Robustly Optimized BERT Approach) architecture was maintained, for the same reasons that motivated its initial choice.
+
+#### i. Training Dataset
+The dataset used in this phase comes from the ‘sample\_e\_s\_g.csv’ file, generated in the thematic labeling phase described in the previous section. Each news article includes: the text field, which contains the title concatenated with the abbreviated body (first 300 characters) of the article, and the `esg_category` field, which contains the assigned label (Environmental, Social, or Governance). To prepare the training dataset, the textual labels are mapped to numerical values:
+
+* Environmental → 0
+* Social → 1
+* Governance → 2
+
+**Class Balancing:** Given that the initial distribution of categories showed differences, the number of examples per class was equalized (n = 1680 examples per category) using random undersampling (resample) techniques, thus reducing the risk of bias towards the majority class. Once the DataFrame was balanced, it was divided into 3 sets: training (70%), validation (15%), and test (15%). The partitioning was done in a stratified manner to maintain the proportion of classes in each subset.
+
+The architecture of the second model is the same as the first, with the difference in the classification layer, which in this case has 3 neurons, each corresponding to an ESG category.
+
+#### ii. Training Procedure
+The training process was carried out using the same configuration as in the first model. During training, the loss on the validation set was monitored at each epoch, applying implicit early stopping criteria if signs of overfitting were detected.
+
+Epoch 1/10 | Train Loss: 0.7331, Train Acc: 0.6465 | Val Loss: 0.3074, Val Acc: 0.8810
+Epoch 2/10 | Train Loss: 0.2717, Train Acc: 0.9031 | Val Loss: 0.2848, Val Acc: 0.8876
+Epoch 3/10 | Train Loss: 0.1673, Train Acc: 0.9419 | Val Loss: 0.2959, Val Acc: 0.8929
+Epoch 4/10 | Train Loss: 0.1053, Train Acc: 0.9671 | Val Loss: 0.3049, Val Acc: 0.9021
+Epoch 5/10 | Train Loss: 0.0580, Train Acc: 0.9810 | Val Loss: 0.3674, Val Acc: 0.8981
+Early stopping triggered!
+
+
+#### iii. Results and Evaluation
+After training, the model was evaluated on the independent test set. The main results were:
+
+* Global Accuracy: 91%
+* Error Distribution:
+    * Most frequent errors: confusion between Social and Governance news, given the semantic proximity of certain topics.
+    * High accuracy for the Environmental class, likely due to the specificity of environment-related terms.
+
+These results reflect that the model is capable of solidly identifying the predominant ESG dimension in the news, achieving accuracy levels suitable for feeding the subsequent modules of score generation and trading signals.
+
+In addition to the general global accuracy metric (91%), other detailed metrics were calculated for each of the ESG categories (Environmental, Social, Governance) on the test set. This is crucial for evaluating not only the overall performance of the model but also its ability to effectively discriminate between the three classes, especially considering the complex and often overlapping nature of ESG topics.
+
+| Category      | Precision | Recall   | F1-Score | Support |
+|---------------|-----------|----------|----------|---------|
+| Environmental | 0.89      | 0.97     | 0.93     | 252     |
+| Social        | 0.93      | 0.90     | 0.92     | 252     |
+| Governance    | 0.93      | 0.89     | 0.91     | 252     |
+| Accuracy Global | 0.92      |          |          |         |
+
+### b. Inference on the Complete Dataset
+Notebook: 06\_INFERENCE\_ROBERTA\_2.ipynb
+
+Once the RoBERTa model specialized in the thematic classification of ESG news was trained, the model was applied to the complete set of news previously identified as relevant to ESG matters. The process begins with loading the ‘total\_news\_esg\_filtered.csv’ file, which contains all the news labeled as relevant (`esg_pred == 1`). To prepare the inputs for the model, the `text` column was used as input, composed of the news title concatenated with the first 300 characters of the content, ensuring a balance between information richness and the maximum length allowed by the RoBERTa model.
+
+Each news article is labeled with a number (0 for Environmental, 1 for Social, and 2 for Governance), which is subsequently mapped to its corresponding textual label to facilitate the interpretation of the results.
+
+After complete labeling, the following distribution of categories can be observed: Environmental = 110702, Social = 151232, and Governance = 169286.
+
+To ensure homogenization in company identification, small corrections were applied to the names of companies detected in the news, such as:
+
+* "jp morgan" → "jpmorgan"
+* "cvs health" → "cvs"
+* "the walt disney company" → "disney"
+
+The new dataset, which includes the ESG thematic classification for each news article, is stored in the ‘news\_second\_classified.csv’ file. This dataset forms the fundamental basis for the following phases of the project, allowing for the construction of specific daily scores by ESG dimension and the design of differentiated investment strategies.
+
+In conclusion, this inference phase completes the thematic structuring of the ESG news corpus, providing the system with a precise, scalable, and aligned information flow for the dynamic tracking of sustainability factors at the business level.
+
+## 6. THIRD NLP MODEL
+After completing the thematic classification of ESG-relevant news, the development of a third analysis module aimed at evaluating the sentiment conveyed by each news article is addressed. The objective of this phase was to enrich the database with an additional variable that captures the implicit perception conveyed by financial media about companies, a fundamental aspect for incorporating a qualitative analysis dimension into the subsequent modeling of ESG scores.
+
+Sentiment analysis was specifically focused on ESG news, classifying the general tone of each news article into three possible categories:
+
+* **Bullish:** news with an expected positive impact on the company. Examples: announcements of successful sustainability initiatives, awards, improvement of ESG policies.
+* **Bearish:** news with an expected negative impact. Examples: regulatory sanctions, environmental problems, governance scandals.
+* **Neutral:** news without a significant foreseeable impact.
+
+To maintain methodological consistency with the previous models, the generation of the labeled sample is carried out following the same approach: LangChain + OpenAI API (gpt-4o).
+
+Notebook: 07\_LONGCHAIN\_3.ipynb
+
+Prompt used:
+
+You are an expert financial analyst specialized in ESG-related news.
+Analyze the following news article and classify its overall sentiment towards the company's performance as one of:
+
+bullish (positive impact expected)
+bearish (negative impact expected)
+neutral (no significant impact) Only respond with one of these three words: bullish, bearish, or neutral. Text: {input}
+
+### a. Model Architecture and Training
+Notebook: 08\_SENTIMENT\_ANALYSIS.ipynb
+
+#### i. Training and Application of a Proprietary Sentiment Analysis Model
+The dataset used for this task is located in the ‘sentiment\_sample\_e\_s\_g.csv’ file, obtained in the previous phase through language model-assisted classification. Each news article in the dataset contains the concatenation of the title and the beginning of the news body, as well as the sentiment label predicted manually as bullish, bearish, or neutral. The first stage of the process involves adequately preparing the dataset. For this:
+
+* Textual sentiment is mapped to numerical values, assigning 0 to bearish news, 1 to neutral news, and 2 to bullish news.
+* Observing a slight imbalance between classes, it is necessary to apply a random undersampling (downsampling) strategy to equalize the number of examples per class, setting a sample size of 2,312 examples for bearish and neutral, equal to the number of bullish examples available.
+* The dataset is reorganized into a standard format for classification, with two columns: `body` (input text) and `label` (mapped sentiment).
+
+Subsequently, the texts are tokenized using the official RoBERTa tokenizer (`roberta-base`), truncating and padding up to a maximum length of 256 tokens. The balanced dataset is divided into three subsets: 70% for training, 15% for validation, and 15% for test, applying stratified partitioning to preserve the proportions of classes in each subset. This preparation allows for the construction of TensorDataset and DataLoader for each partition, facilitating efficient batch training and evaluation.
+
+#### ii. Model Architecture
+To address the multi-class sentiment analysis task on financial news (classification into bearish, neutral, bullish), a custom model called `NewsSentimentAttentionModel` was developed, designed based on the pre-trained RoBERTa and integrated with additional multi-head attention and feed-forward layers that enrich the ability to capture complex patterns in the texts.
+
+The architecture follows a modular scheme composed of several layers and key functional blocks:
+
+* **Base Layer: RoBERTa Encoder:** The model starts by loading ‘RobertaModel’ (configuration 'roberta-base'), which acts as the main encoder and is responsible for converting the tokenized text (input) into a matrix of contextual embeddings of dimension (sequence x 768).
+* **Additional Multi-Head Attention:** To further refine and enrich the representation generated by RoBERTa, an `nn.MultiheadAttention` layer was added. This layer implements a self-attention mechanism, which allows the model to weight different parts of the input sequence in relation to itself, improving the ability to identify complex relational patterns within the text (e.g., relating distant subjects and predicates in the sentence or identifying global emotional context). Justification: Although RoBERTa already contains multiple attention layers, adding an additional external layer can act as a kind of refinement, especially useful when working on a specific domain (financial news with emotional nuances).
+* **Additional Feed_Forward:** After the attention layer, a feed-forward block is implemented that follows the typical structure of Transformer blocks, composed of: `Linear(768, 768) + ReLU + Dropout(0.1) + Linear(768, 768)`. This improves the model's ability to capture non-linear and hierarchical patterns within the textual representation.
+* **Second Normalization + Pooling Block:** Reinforces the model's robustness. Normalization ensures that activations remain within controlled ranges, while pooling (e.g., mean-pooling or max-pooling over the sequence) condenses the information into a fixed vector of 768 dimensions.
+* **Final Classification:** After obtaining the final 768-dimensional vector, a sequence of dense layers is applied that ultimately generates 3 output classes: bearish, neutral, bullish.
+
+Input (input_ids, attention_mask)
+→ RoBERTa (last_hidden_state)
+→ Multi-Head Attention (4 heads)
+→ Add & Norm
+→ Feed-Forward + Dropout + ReLU
+→ Add & Norm
+→ Pooling (mean over sequence)
+→ Dense Layer (768→128) + ReLU + Dropout
+→ Dense Layer (128→3)
+→ Output logits (for CrossEntropyLoss)
+
+
+**Fine-tuning Strategy: Partial Layer Freezing:** Freezing consists of blocking the parameters (weights) of certain layers of the model so that they are not updated during training. This allows parts of the model with already acquired knowledge (in this case, from the general pre-training of RoBERTa) to remain stable, while only the most relevant layers for the specific task are adjusted. In this specific context, all layers except the last 4 of the encoder were frozen: `layer.8`, `layer.9`, `layer.10`, and `layer.11`.
+
+The model training was carried out for a maximum of 10 epochs, using:
+
+* **Loss function:** CrossEntropyLoss, suitable for multi-class classification problems.
+* **Optimizer:** AdamW, especially effective in Transformer architectures.
+* **Initial learning rate:** 2e-5.
+* **Batch size:** 16 examples.
+* **Acceleration using GPU when available.**
+
+To prevent overfitting phenomena, an early stopping mechanism based on validation loss is implemented, with a patience of 3 epochs. The model is saved to disk each time the validation loss improves, allowing for the recovery of the best trained version once the process is complete.
+
+#### iii. Results
+The model shows solid performance, especially in the Negative and Positive classes, where F1-scores of 0.83 and 0.84 were achieved respectively. This indicates that it is particularly effective in identifying news with a clear negative or positive bias.
+
+The Neutral class, however, presents a lower F1-score (0.68), reflecting a greater difficulty in accurately detecting this type of news. This behavior is expected in sentiment analysis tasks, where neutral news tends to be more ambiguous or less semantically defined, making its classification difficult even for advanced models.
+
+The global accuracy of the model is 78%, which implies that approximately 8 out of 10 news articles are correctly classified into their corresponding sentiment category.
+
+The evaluation of the model has shown that the system is capable of adequately capturing the tone of the news, offering performance comparable to that of commercial sentiment analysis models, but with the advantage of having been trained specifically on a corpus of ESG news, aligned with the project objectives.
+
+Once the model was validated, inference was performed on the complete corpus of relevant news (`news_second_classified.csv`). For this, the trained model is loaded, the entire corpus is tokenized with the same configurations used in training, and inference is performed batch by batch, classifying each news article as bearish, neutral, or bullish.
+
+bearish 149725
+neutral 145726
+bullish 135769
+
+
+The result of this phase was the generation of a new sentiment column (`predicted_sentiment_final`) associated with each ESG news article in the global dataset. This column, along with the thematic classification (Environmental, Social, Governance), forms the necessary information base for constructing the dynamic ESG scores that will guide the investment strategies in the subsequent phases of the system.
+
+In conclusion, the development of a proprietary sentiment analysis model adapted to th
