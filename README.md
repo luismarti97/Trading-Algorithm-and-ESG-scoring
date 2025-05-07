@@ -155,3 +155,170 @@ This details the three main sources of information used:
 
 1.  **Quantexa API News (2023–2025):** Highlighting its named entity recognition (NER) capabilities and ESG thematic filters.
 2.  **NewsAPI (2020–2022):** Explaining the need to apply a subsequent filtering process using NER techniques (with the Spacy tool and the 'en\_core\_web\_sm' model) to correctly associate news with the selected companies.
+
+## 4. FIRST ROBERTA MODEL
+This section details the development and application of the first RoBERTa model, which serves to classify news articles as either related to ESG topics or not.
+
+### a. News Tagging
+Notebook: 01_LONGCHAIN.ipynb
+
+One of the primary challenges in working with large volumes of unstructured text is the need to identify and classify information units that are truly relevant to the analysis objectives. In this thesis, this translates to distinguishing between news articles that address issues related to ESG (Environmental, Social, or Governance) criteria and those that do not, despite previous filtering during news extraction. This stage is critical as it acts as an input filter for the system.
+
+To train an NLP model for this task, a sample of labeled news is required. For this purpose, a solution based on large language models (LLMs) was chosen, utilizing the LangChain library as an orchestration framework and the OpenAI API, specifically the GPT-4o model, as the inference engine. Unlike traditional supervised learning-based classifiers, this approach leverages the advanced semantic capabilities of language models without the need for a pre-existing human-labeled dataset.
+
+In the context of this thesis, a news article is considered "ESG-related" if it directly or indirectly addresses any of the three ESG dimensions, even if it does not explicitly mention the acronym "ESG." For example, a news article about fines imposed for polluting discharges or about a change in the board of directors due to corruption scandals is undoubtedly ESG-relevant, even without direct reference to that terminology.
+
+#### i. Description of the Automated Tagging Process
+The technical implementation of the classification system was carried out using a combination of LangChain and OpenAI, with a sequential processing logic:
+
+1.  **Prompt Definition:** A detailed prompt was designed instructing the model to act as an expert in ESG analysis. The prompt used was:
+    ```
+    You are an expert in ESG (Environmental, Social, and Governance) analysis.
+    Analyze the following financial news article and determine whether it is related to ESG topics.
+    Please interpret ESG in a broad and inclusive way:
+    - Environmental includes sustainability, climate change, emissions, energy, biodiversity, etc.
+    - Social includes diversity, inclusion, employee well-being, human rights, education, community impact, etc.
+    - Governance includes ethical behavior, transparency, corporate governance, executive compensation, stakeholder rights, etc.
+    Even if the news is not explicitly labeled as ESG, it may still relate to ESG themes based on its content.
+    Always respond in English, even if the original article is in another language.
+    Return:
+    - `esg`: true or false
+    Text:
+    {input}
+    ```
+
+2.  **Model Used:** The chosen model was gpt-4o, a state-of-the-art LLM optimized for fast and contextually accurate responses.
+
+3.  **Classified Sample:** A random sample of 6,000 news articles was extracted from the total dataset. The defined prompt was applied to each news article, and the model returned a structured output with a boolean label (`True` if the news is ESG-related, `False` otherwise).
+
+This approach allowed for the rapid construction of a labeled dataset (`sample_esg_or_not.csv`) that is consistent and based on a solid interpretative foundation.
+
+### b. Model Architecture and Training
+Notebook: 02_ROBERTA_ESG_OR_NOT.ipynb
+
+Once the labeled sample dataset was obtained, the next step involved training a natural language processing model. The chosen model for this process was RoBERTa. The selection of this model stems from the need to interpret not only isolated keywords but also the complete semantic context in which expressions are framed. For this reason, a model based on the RoBERTa (Robustly Optimized BERT Approach) architecture, developed by Liu et al. (2019), was chosen as an evolution of the traditional BERT model. RoBERTa is a language model based on Transformers, pre-trained through self-supervised learning on large amounts of textual data.
+
+The choice of RoBERTa was based on several strategic criteria:
+
+* **Ability to handle financial and news texts with complex nuances, irony, or implicit relationships**, typical of business language.
+* **Effective transfer learning:** Since the model has already been pre-trained on a large corpus, only fine-tuning on the specific set of ESG news is required.
+* **Robustness to textual noise:** Essential for news extracted from different sources with varied writing styles.
+
+Overall, RoBERTa provides a solid and efficient solution to address the binary ESG / non-ESG classification required in this phase of the system.
+
+#### i. Training Dataset
+The dataset used to train the RoBERTa model comes from the initial labeling process described in the previous section. From the complete corpus of news extracted between 2020 and 2025, a sample of 6,000 news articles was selected and automatically labeled using a language model, with manual validation performed on a representative proportion. To prepare the texts before being processed by the NLP models, an initial cleaning and structuring process was applied. First, null values in the ‘title’ and ‘content’ columns were replaced with empty strings (''), ensuring that no errors occurred during the concatenation of fields. Subsequently, a new field called ‘input\_text’ was generated, consisting of the concatenation of the news title and the first 300 characters of the main content.
+
+This decision addresses the need to maintain a balance between context and computational efficiency: the title usually captures the essence of the news, while an initial fragment of the content provides additional details without overloading the input with excessively long text.
+
+To avoid class imbalance problems, a resampling process was implemented:
+
+* The majority class (ESG news) was downsampled to match the number of examples in the minority class (non-ESG news).
+* This process allows for the training of a balanced model, minimizing bias towards the majority class.
+
+#### ii. Preprocessing and Tokenization
+Before introducing the data into the RoBERTa model, a process called tokenization is necessary. This is a key step in any natural language processing (NLP) model because it converts raw text (e.g., a sentence) into a sequence of numbers that the model can interpret. The selected tokenizer is the official one from ‘roberta-base’. The main operations performed are:
+
+* Conversion of text to tokens according to the pre-trained vocabulary. For example, the sentence ‘The environment is critical’ can be transformed into something like: `[0, 1332, 1234, 19, 4567, 2]`
+* Automatic padding to adjust all sequences to the same length (256 tokens), as these models require all sequences within a batch to have the same length.
+* Truncation in cases where texts exceeded the maximum length allowed by the model.
+
+The result of this process was a set of input tensors (`input_ids`) and attention masks (`attention_mask`). The input tensors represent the sequences, and the attention masks indicate which positions are real content and which are padding, all necessary to properly feed the RoBERTa model.
+
+The image represents an example of sentence classification.
+
+To properly feed an NLP model in PyTorch, it is essential to structure the data in a format compatible with the library's internal tools. PyTorch provides a module called `torch.utils.data.Dataset`, which is a standard base class for creating custom datasets. This allows the data, even if it comes from a tabular file (like a pandas DataFrame), to be transformed into tensors and batches, which are the working units of deep learning models.
+
+For this purpose, a custom class called ‘CustomDataset’ was designed. This class allows for the transformation. In particular, the dataset contains two key columns: `text` (with the news text) and `label` (the target class, encoded as an integer).
+
+The ‘CustomDataset’ class implemented the following main functionalities:
+
+* **Initialization:** Stores the list of texts and their respective labels, along with the tokenizer and the maximum length (`max_len`) allowed for the sequences.
+* **`__len__` method:** Returns the total number of samples, a standard requirement for integration with PyTorch DataLoader.
+* **`__getitem__` method:** Processes each text by applying `tokenizer.encode_plus`, which performs tokenization and returns the `input_ids` (tokens) and the `attention_mask` necessary for Transformer-based models.
+
+The method returns a dictionary with:
+
+* `input_ids`: tokenized sequence,
+* `attention_mask`: attention mask,
+* `targets`: real label (converted to a PyTorch tensor).
+
+Subsequently, for the training and evaluation phase, the balanced dataset was divided into three subsets: train (80%), validation (10%), and test (10%).
+
+This division was performed using the `train_test_split` function from Scikit-learn, applying the `stratify` argument to ensure that the proportion of classes remained constant in all subsets, which is fundamental to avoid bias and ensure robust evaluation.
+
+Once the datasets (`train_dataset`, `valid_dataset`, `test_dataset`) were defined, objects called DataLoaders were created, which are fundamental tools in PyTorch because they: divide the dataset into automatic mini-batches during training (`batch_size` parameter), randomize (`shuffle`) the samples in each epoch to improve generalization, and efficiently optimize data loading into memory.
+
+#### iii. Model Architecture
+The model designed for ESG news classification is based on a fine-tuning approach of a pre-trained model, specifically `roberta-base`. This approach leverages the linguistic knowledge previously acquired by RoBERTa, quickly adapting it to a new task with relatively little additional data. The general scheme of the model is as follows:
+
+1.  **Loading the base model (RoBerta Model):** `RobertaModel` is the implementation of the RoBERTa model available in the Hugging Face Transformers library. It is based on the Transformer architecture, a deep neural network designed to work with text sequences and capture complex contextual relationships between words. It transforms the tokenized texts (the `input_ids` and `attention_mask`) into high-dimensional dense representations called contextual embeddings. Each token in the input receives an embedding that not only represents its isolated meaning but also its relationship with the other tokens in the sequence.
+
+    The main output used in this project is `pooler_output`, which corresponds to the final representation of the special `[CLS]` token (which is always at the beginning of the sequence). This vector is treated as a summary of the global meaning of the text and is typically used for sequence classification tasks.
+
+2.  **Dropout layer:** The Dropout layer (with a probability of 0.3 in this project) is a very common regularization technique in neural networks. Implemented using `nn.Dropout` in PyTorch, it works by randomly deactivating a percentage of the neurons during each training pass. This prevents the model from memorizing the training data too much (overfitting) and improves its ability to generalize to new data. In this case, by applying Dropout to the `pooler_output`, the part that most influences the final prediction is being regularized.
+
+3.  **Linear projection layer:** This is a fully connected layer (implemented as `nn.Linear` in PyTorch) that takes the output of the RoBERTa model (a high-dimensional vector, e.g., 768 dimensions in `roberta-base`) and projects it to a lower dimension. In this case: 2 neurons, one for each class (ESG / non-ESG).
+
+    This layer is responsible for converting the contextual representation of RoBERTa into a concrete final prediction. It acts as a "bridge" between the part of the model that understands language and the part that makes decisions.
+
+This architecture was chosen due to its simplicity and efficiency, as the model leverages the power of RoBERTa without adding additional complex layers, which keeps the architecture lightweight and efficient. Furthermore, its robustness in using only a linear layer and Dropout on top of the `pooler_output` follows a recommended and well-established practice in the literature for text classification tasks with transformers (see Liu et al., 2019).
+
+#### iv. Training Procedure
+The training of the RoBERTa model fine-tuned for ESG classification was carried out through a carefully designed procedure to ensure numerical stability, good convergence, and avoid typical problems such as overfitting. The key components and their function are described below:
+
+1.  **Loss function: Binary Cross-Entropy with Logits Loss (BCEWithLogitsLoss):** This function efficiently combines binary cross-entropy (used for binary classification problems) with the sigmoid function, all in one step. By integrating the sigmoid function directly within the loss, numerical instability that can arise if they are applied separately is avoided. It is the standard and recommended choice for binary classification tasks in deep neural networks like Transformers.
+
+2.  **Optimizer: AdamW (Adam with Weight Decay):** AdamW is an improvement over the traditional Adam optimizer. It introduces weight decay in a decoupled manner, which improves the model's ability to generalize and prevents weights from growing too large during training. AdamW is highly recommended for Transformer-based models, as it maintains good stability during optimization and helps prevent overfitting, which is crucial in NLP tasks where models are often very large.
+
+In this project, a systematic optimization of hyperparameters using exhaustive methods such as grid search, random search, or Bayesian algorithms was not carried out. Instead, a trial-and-error approach was adopted, adjusting the values of key hyperparameters (such as batch size and learning rate) based on prior experience and best practices described in the literature for Transformer-based models.
+
+Main hyperparameters:
+
+* **Batch size:** 32 examples per iteration.
+* **Number of epochs:** 10 complete passes over the training set.
+* **Initial learning rate:** adjusted by scheduler, starting at 1e-5.
+
+Throughout the training process, the loss on the training and validation sets and the accuracy were monitored to evaluate the quality of the predictions. This monitoring allowed for the identification of potential overfitting problems and the application of early stopping (early detection), in this case, after 5 epochs, when the improvement on the validation set stabilized or began to deteriorate.
+
+The complete training was performed in a GPU environment, allowing for reasonable adjustment times even when working with the RoBERTa model.
+
+#### v. Results and Evaluation
+After the training process was completed, the performance of the model was evaluated on the validation set. The main results obtained were:
+
+* **Accuracy (global accuracy):** 88.9%
+* **Precision (precision in ESG class):** 89%
+* **Recall (sensitivity to detect ESG news):** 91%
+* **F1-Score:** 88%
+
+In addition, a confusion matrix was constructed that reflects the balance between false positives and false negatives. These results indicate that the model is capable of effectively identifying news related to ESG, maintaining an adequate balance between precision and sensitivity.
+
+The relatively low rate of false negatives (ESG news incorrectly classified as non-ESG) is particularly important, given that the priority of the system is to maximize the detection of events relevant to corporate sustainability.
+
+#### vi. Conclusion
+The RoBERTa model fine-tuned through transfer learning has proven to be an effective tool for addressing the first major challenge of the system: the accurate filtering of news related to ESG.
+
+Thanks to its ability to interpret the context of news, overcome the purely keyword-based approach, and quickly adapt to the financial domain, the model provides a reliable foundation on which to build the following analysis modules.
+
+**Model:** esg\_model\_weights.pt
+
+### c. Inference on the Complete Dataset
+Notebook: 03\_INFERENCE\_ROBERTA\_1.ipynb
+
+After the completion of the training and validation of the RoBERTa model specialized in the detection of ESG (Environmental, Social, Governance) news, the model was applied to the complete set of news collected within the time frame of March 2020 to March 2025. This phase allowed for the automatic and efficient classification of each news article according to its ESG relevance, serving as an indispensable preliminary step for subsequent thematic and strategic analyses.
+
+#### i. Corpus Preparation for Inference
+The set of news articles used for inference was stored in a single file ‘noticias\_totales.csv’. However, since the RoBERTa model requires well-structured and length-controlled textual inputs, it was necessary to perform the same processing that was carried out in the training phase. This step ensures that the predictions are consistent and comparable with the results obtained during validation.
+
+#### ii. Inference Procedure
+The model was applied to the complete news corpus using a DataLoader, which allows for the processing of data in batches and optimizes computational efficiency, especially on GPUs. The flow of operations was as follows:
+
+1.  **Prediction of logits:** For each batch, the model generates raw outputs (logits) corresponding to the ESG and non-ESG classes. Logits represent the scores before applying the sigmoid function.
+2.  **Conversion to discrete predictions:** Using the `torch.max` function, the class with the highest probability was selected for each news article. This converts the predictions into discrete values: 0 → News not related to ESG and 1 → News related to ESG.
+3.  **Storage of results:** The predictions were assigned to a new column `esg_pred` in the original DataFrame.
+
+#### iii. Validation and Quality Control
+Although the model had been previously validated on the test set, a basic post-inference verification was performed (total number of news classified as ESG – 400K):
+
+* **Manual review of a sample:** A random subset of several news articles classified as ESG and non-ESG was selected for manual inspection.
+* **Thematic coherence:** The news labeled as ESG predominantly included relevant events such as sustainability initiatives,
