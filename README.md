@@ -492,4 +492,462 @@ bullish 135769
 
 The result of this phase was the generation of a new sentiment column (`predicted_sentiment_final`) associated with each ESG news article in the global dataset. This column, along with the thematic classification (Environmental, Social, Governance), forms the necessary information base for constructing the dynamic ESG scores that will guide the investment strategies in the subsequent phases of the system.
 
-In conclusion, the development of a proprietary sentiment analysis model adapted to th
+## 7. DATA PREPARATION
+Notebook: 09\_DATA\_PREPARATION.ipynb
+
+To ensure the quality and consistency of the ESG news dataset prior to the generation of dynamic scores, a process of cleaning and standardizing information was carried out.
+
+The starting point was the ‘df\_finally\_labeled.csv’ file, which already contains the necessary main fields for each news article: company ticker identifier, publication date, ESG thematic classification (Environmental, Social, or Governance), and predicted sentiment (bullish, bearish, or neutral).
+
+First, a structural cleaning of the dataset was performed. Unnecessary columns that do not add value to the subsequent analysis, such as ‘description’, ‘sentiment\_body’, or ‘id’, were removed. This cleaning reduces the file size and simplifies later operations. The next phase focused on ensuring the correct association between tickers and company names. Cases were detected where, due to extraction problems in previous phases, some entries had the ticker but not the company name, or vice versa. To resolve this situation:
+
+* If a news article has the ticker informed but the company absent, the corresponding company name is imputed using a dictionary generated from existing matches in the dataset.
+* Reciprocally, if a news article has the company name but the ticker absent, the corresponding ticker is imputed using the inverse mapping.
+
+This process allows for the accurate filling of the vast majority of missing values in these fields, thus ensuring the correct traceability between news and companies.
+
+However, there were still special cases where the ticker appeared as UNKNOWN. To address this issue, a manual correction process based on the company name was designed. The following substitutions were applied:
+
+* "disney" → "DIS"
+* "general motors" → "GM"
+* "jpmorgan" → "JPM"
+* "morgan stanley" → "MS"
+* "wells fargo" → "WFC"
+* "comcast" → "CMCSA"
+* "american express" → "AXP"
+* "the home depot" → "HD"
+
+This manual imputation allows for the accurate recovery of the correct tickers in most UNKNOWN cases, avoiding the loss of valuable information for relevant companies in the analysis.
+
+Once the ticker and company issues were resolved, the imputation of the industry sector (`sector`) was addressed for those news articles where the sector was initially absent. To do this, a dictionary was constructed that associates each ticker with the most frequent sector in the dataset. This mapping is applied only in cases of sector absence, avoiding overwriting valid information. Thanks to this strategy, the sector field was completed for a very high percentage of the news articles, allowing for subsequent sectoral analyses of the ESG scores.
+
+Finally, the cleaned, structured, and enriched dataset was chronologically ordered by publication date, ensuring correct temporal alignment for the construction of dynamic analysis windows. The definitive dataset was stored in the `df_cleaned.csv` file, serving as the basis for the generation of daily ESG scores that feed the sustainable investment strategies.
+
+In conclusion, this data preparation phase not only consolidates all the previously extracted and processed information but also establishes the necessary foundations of integrity, consistency, and robustness to confidently face the predictive modeling of ESG evolution based on news events. Each correction applied in this phase represents a fundamental step towards obtaining reliable, replicable, and scientifically valid results in the later stages of the project.
+
+## 8. MEDIA REPUTATION
+Notebook: 10\_MEDIA\_REPUTATION.ipynb
+
+Once the cleaning phase of the news dataset was completed, the next step involves the calculation of the media sources' reputation. The objective of this phase is to weigh each news article considering the reliability and influence of the source that publishes it.
+
+### a. Theoretical Basis
+Academic literature has demonstrated that repeated media exposure and the frequency of appearance in media significantly influence public perception and the construction of corporate reputation. Deephouse (2000) defines media reputation as a strategic resource that directly impacts the perceived value of companies and argues that media repetition reinforces corporate legitimacy. Carroll (2010) also points out that the media act as amplifiers of reputation, where frequency and visibility are key indicators of influence. Likewise, Fombrun and Shanley (1990) argue that companies more covered by consolidated media enjoy a more solid and sustained reputation over time, which justifies that weighting by frequency of appearance is a valid proxy to measure the relevance and informative impact of a source.
+
+Based on this theoretical foundation, it is established that the most prolific sources (in terms of the number of news articles) should have a greater specific weight in reputational analyses and, by extension, in the ESG prediction system.
+
+* Carroll, C. E. (2010). *Corporate reputation and the news media: Agenda-setting within business news coverage in developed, emerging, and frontier markets*. Routledge.
+* Christophersen, M., & Jurish, B. (2021). *RapidFuzz: A fast string matching library*. Retrieved from https://maxbachmann.github.io/RapidFuzz/
+* Deephouse, D. L. (2000). Media reputation as a strategic resource: An integration of mass communication and resource-based theories. *Journal of Management, 26*(6), 1091–1112.
+* Fombrun, C. J., & Shanley, M. (1990). What's in a name? Reputation building and corporate strategy. *Academy of Management Journal, 33*(2), 233–258.
+
+### b. Development
+To address this issue, the process begins by loading the ‘df\_cleaned.csv’ dataset, which contains all the relevant news already structured and labeled. Due to the inconsistency in the nomenclature of the sources, which can distort future analyses, such as "Reuters", "Reuters News Service", or "Reuters World News", a normalization process based on "fuzzy matching" techniques was implemented.
+
+Using the ‘rapidfuzz’ library, a string comparison algorithm was applied to group similar variants under a single identifier. The process involves iterating through all sources and, for each new source, searching for the most similar match among the already normalized ones, provided that the similarity exceeds a predefined threshold of 90%. In this way, a ‘source\_map’ is constructed that unifies all variants under a representative base name, usually the shortest or standard one.
+
+Once the sources are normalized, the volume of news attributed to each source is calculated, also broken down by sector. For this:
+
+* The news articles are grouped by (sector, source) pairs.
+* The number of news articles corresponding to each combination is calculated, thus obtaining a first measure of the relative influence of each source within each economic sector.
+
+Based on these news volumes, a scaling function was designed to generate a `reputation_score` for each source. The assignment of the score follows a two-tier logic:
+
+* Sources with 30 or more news articles in a given sector receive a maximum score of 1, understanding that a high frequency of appearance is indicative of recognized influence and reliability in that area.
+* For sources with fewer than 30 news articles, a logarithmic scaling function was applied that assigned a score between 0.5 and 1.
+
+This function allows for the progressive assignment of scores, slightly penalizing less representative sources without completely excluding them from the analysis. In summary, the incorporation of the `reputation_score` allows for the addition of an information quality dimension to the ESG news analysis. By weighting the importance of each event not only based on its content but also based on the reliability of the source that originates it, the system's ability to prioritize relevant signals and minimize the impact of events reported by marginal or unreliable media is improved. This strategy contributes to increasing the robustness and interpretability of the global ESG prediction system based on media analysis.
+
+## 9. DATA EXPLORATION
+Notebook: 11\_DATA\_EXPLORATION.ipynb
+
+Before proceeding with the definitive construction of the dynamic ESG scores, a detailed exploratory analysis of the processed news dataset was carried out. The objective of this phase is twofold: on the one hand, to obtain a structured view of the thematic, sectoral, and sentimental distribution of the news; on the other hand, to identify patterns that could guide the subsequent definition of ESG signal generation strategies.
+
+### a. Data Preparation
+The two main datasets are used, the one containing the news and the one with the ESG scores (`NEWS_+_PRESS_ESG.csv` and `ESG_SCORES.csv`), standardizing the common columns.
+
+### b. Distribution of News by Company and ESG Category
+The first step consists of quantifying the media coverage for each of the companies, breaking down the total volume of news according to the corresponding ESG category.
+
+As we can observe, there are companies like Tesla, Apple, or Amazon that account for most of the total news, while others like Valero or Abbvie occupy a more residual space.
+
+The analysis confirms the existence of a notable imbalance in ESG coverage: while some companies show high media exposure distributed evenly across the three ESG categories, others are characterized by concentrating their visibility exclusively on environmental or governance aspects. This heterogeneity suggests that the public perception of companies may be strongly conditioned by the most recurrent ESG topics in the press.
+
+An analysis of the temporal evolution of the volume of ESG news was also carried out, where we can observe how the volume of these grows considerably from mid-2023 to mid-2024.
+
+### c. Clustering Analysis: Identification of Mediatic ESG Profiles
+With the aim of detecting latent patterns of mediatic ESG behavior, a clustering analysis was carried out on the companies. This analysis allows for the grouping of companies based on characteristics such as the total number of ESG news, the distribution by ESG category, and the average sentiment associated with each dimension.
+
+For the segmentation, the K-Means algorithm is used, configured to generate three clusters. The choice of this algorithm is justified by its simplicity, speed, and effectiveness in handling standardized numerical data. The selection of three clusters seeks to identify differentiated profiles of companies, potentially corresponding to high, medium, and low levels of mediatic ESG exposure.
+
+The analysis confirms the existence of three well-defined groups: a first cluster composed of companies with high media presence and balanced distribution across the three ESG categories; a second group of companies with moderate exposure, generally dominated by a specific category; and a third cluster that groups companies with low media visibility or poorly defined ESG profiles. This segmentation is especially useful for guiding future business strategies and for focusing predictive analyses based on the mediatic profile of each company.
+
+To facilitate the interpretation and visualization of the obtained clusters, the Principal Component Analysis (PCA) technique is used, which allows for the reduction of the dimensionality of the multivariate space to two principal components. This reduction maintains most of the explanatory variance of the data and makes it possible to graphically represent the structure of the clusters in a two-dimensional plane.
+
+Finally, the ‘df\_summary’ dataset, enriched with the cluster assignment and PCA coordinates, has been saved to be used in the following modeling phases.
+
+In conclusion, this exploratory analysis phase allows for a detailed characterization of the universe of companies based on their mediatic ESG exposure, providing a solid foundation for understanding the dynamics of future score generation. The combination of descriptive analysis, construction of summary variables, and clustering techniques has opened the door to more sophisticated approaches in the interpretation of ESG signals and in the personalization of sustainable investment strategies.
+## 10. LSTM
+This section details the process of preparing the data for and training a Long Short-Term Memory (LSTM) recurrent neural network model to predict daily ESG scores.
+
+### a. Embedding Creation
+Notebook: 12\_EMBEDING\_GENERATION.ipynb
+
+The objective of this section is to transform the content of the news articles into dense numerical representations (embeddings) that capture semantic and contextual relationships between different news items. This embedding generation phase constitutes the first step in preparing the input for the LSTM model. This involves transforming daily texts into fixed-dimension vector representations that capture both semantic content and additional information relevant for prediction tasks.
+
+#### i. Data Preparation
+The process works with the ‘NEWS\_+\_PRESS\_ESG.csv’ dataset, which contains the preprocessed and structured ESG news and press releases, and the ‘DF\_SUMMARY.csv’ summary, which provides complementary information such as the cluster to which each company belongs (identified in the previous exploration phase).
+
+Before proceeding with embedding generation, a final validation and cleaning of the data is performed, ensuring the absence of null values and the correct typing of key columns. This phase is essential to ensure the quality of the embeddings and avoid the propagation of errors in subsequent phases.
+
+#### ii. Embedding Generation
+The generation process is carried out using the SentenceTransformer architecture (all-MiniLM-L6-v2). Each news article (consisting of a title and/or body of text) is transformed into a high-dimensional numerical vector (768 dimensions). The choice of Sentence Transformers is based on their ability to generate contextual and meaningful embeddings at the sentence or complete document level, overcoming the limitations of traditional models such as Word2Vec or TF-IDF, which lack a deep understanding of context.
+
+#### iii. Grouping and Dimensional Reduction
+Subsequently, the news articles are grouped by ticker, date, and ESG category, concatenating all news related to the same company and ESG dimension on the same day into a single text. This strategy is justified by the need to compactly capture all available information for each company-date-category combination, avoiding the fragmentation of signals that could occur if individual news items were processed in isolation.
+
+Once the aggregated corpus was built, embeddings were generated using a pre-trained SentenceTransformer model (all-MiniLM-L6-v2). This choice is based on several reasons:
+
+* SentenceTransformer models are specifically designed to generate embeddings that preserve the semantics of phrases and paragraphs, not just individual words.
+* The all-MiniLM-L6-v2 model offers an excellent balance between quality and computational efficiency, capable of generating high-quality embeddings with a reasonable cost of resources.
+* Being a multilingual model, it ensures adequate coverage even in the case of news containing technical or financial English expressions.
+
+However, working directly with such high-dimensional embeddings can be inefficient and even detrimental to the training of subsequent neural networks, especially in datasets of limited size. Therefore, dimensionality reduction is applied using Principal Component Analysis (PCA), reducing the representation of each embedding to 100 dimensions. The choice of PCA is justified by its ability to:
+
+* Preserve most of the informative variance of the original set.
+* Eliminate redundancies and noise in the data.
+* Improve the efficiency and stability of the subsequent LSTM model training.
+
+#### iv. Embedding Enrichment with Cluster Information
+To provide the embeddings with greater structural context, each reduced embedding is combined with the cluster information to which the company belongs (obtained previously in the clustering analysis). This combination is implemented by concatenating the reduced vector with the numerical value of the cluster, thus generating an enriched embedding that integrates both the semantic representation of the text and the strategic segmentation identified in previous phases. Finally, the set of generated embeddings has been stored in the ‘EMBEDDINGS.pkl’ file. Each row of the file contains:
+
+* The company identifier (ticker).
+* The date of the event.
+* The ESG category to which the event belongs.
+* The combined embedding vector of 101 dimensions (100 from the textual content + 1 from the cluster).
+
+In conclusion, this embedding generation phase effectively transforms the flow of daily ESG news into a vector representation suitable for sequential processing by recurrent neural networks. The combination of semantic textual information and structured business context lays the foundation for robust predictive modeling, capable of capturing the temporal dynamics of ESG perception in financial markets.
+
+### b. Window Creation
+Notebook: 13\_WINDOW\_GENERATION.ipynb
+
+Once the embeddings are created, they are transformed into time series, ideal for input into an LSTM network. This process starts with the EMBEDDINGS.pkl dataset, which was built in the previous section.
+
+#### i. Theoretical Basis
+Each window is designed to contain a sequence of 90 days of consecutive ESG events. The choice of this window size responds to several considerations:
+
+* It allows capturing short- and medium-term dynamics in the ESG perception of companies.
+* It covers a sufficiently broad temporal range to include both one-off events and sustained trends.
+* It aligns with the quarterly update logic of many official ESG scores, facilitating subsequent comparisons. In the case of this work, the ESG scores are those registered with the SEC each quarter.
+
+#### ii. Window Generation with Padding
+Since in practice not all companies publish ESG news daily, a padding strategy is implemented for incomplete windows. Specifically:
+
+* Up to 20% of the days in the window (18 days) are allowed to have no real events.
+* When there is no event for a given day, the corresponding embedding is filled with a vector of zeros.
+* If a company does not have at least 72 real event days within a 90-day window, that window is not generated.
+
+Eliminating all windows with incomplete data can drastically reduce the number of available samples, especially for companies with low media coverage. The introduction of padding allows leveraging the available information while maintaining the structural integrity of the window, and at the same time offers the model the possibility to learn to manage the absence of data as an additional feature.
+
+#### iii. Statistics and Validations
+Once the windows are generated, a statistical analysis is performed to validate the quality of the process. Among the main metrics evaluated are:
+
+* Total number of windows generated: 63,401.
+* Standard dimension of each window: 90 days × 101 features.
+* Number of windows that include padding: 1,548.
+
+These statistics confirm that the vast majority of windows are generated from complete data, while a moderate fraction incorporates padding, which is consistent with the defined strategy.
+
+Example: Ticker: TSLA Category: Social Target date: 2023-07-20 First row of the window embedding: `[-0.03310936 -0.01596753 0.08599661 -0.02037817 0.0988157 -0.08739669 -0.19336331 -0.03057285 -0.00702647 -0.21213117]`
+
+#### iv. Export of Results
+The resulting dataset is exported in .pkl format under the name WINDOWS.pkl. This file contains the following structures:
+
+* **X:** list of 90×101 matrices corresponding to the windows.
+* **y:** labels or target values associated with each window.
+* **tickers:** list of company identifiers.
+* **categories:** list of ESG categories (Environmental, Social, Governance).
+* **target\_dates:** list of target dates.
+
+The export ensures the persistence of the dataset in an efficient and reusable format for its immediate use in the predictive modeling phase. This file will serve as direct input for the construction and training phase of the LSTM model, ensuring efficient organization and rapid access to the data during batch training processes.
+
+In conclusion, the generation of temporal windows represents a crucial step in the modeling pipeline, allowing the structuring of ESG event information in a way that the LSTM model could learn the underlying dynamics over time. The combination of an adequate window length, a flexible padding mechanism, and coherent grouping by company and category laid the foundation for robust and realistic sequential prediction in the ESG domain.
+
+### c. Window Association
+Notebook: 14\_MATCHING\_WINDOWS.ipynb
+
+Once the temporal windows of ESG events are generated from daily embeddings, it is necessary to associate each window with a target value that allows training the LSTM model. This target value corresponds to the official ESG score assigned to the company on a date close to the final date of each window.
+
+#### i. Theoretical Basis
+In supervised learning models, the quality of the labels is critical to ensure the reliability of the training and the generalization capacity of the model. In this project, the labels are the official ESG scores, which reflect the environmental, social, and governance assessment of each company on specific dates.
+
+Since the windows are generated based on news and do not always coincide exactly with the dates of the quarterly ESG scores, a tolerant matching process is applied. This process seeks the best possible match between the target date of the window and the dates available in the score series, accepting a maximum margin of 90 days. This approach is essential to maximize the amount of usable data and avoid discarding valuable windows due to small temporal mismatches.
+
+#### ii. Data Preparation
+The following files are used:
+
+* The embeddings generated per day (EMBEDDINGS.pkl).
+* The 90-day windows (WINDOWS.pkl).
+* The official ESG scores (ESG\_SCORES.csv).
+
+#### iii. Tolerant Matching Algorithm
+The matching is implemented as follows:
+
+1.  For each window, the key variables are identified: ticker, category, and target\_date.
+2.  The ESG score DataFrame is searched for an exact match by ticker, category, and date. If this does not exist, the closest score in time is searched for, provided that the difference between the score date and the window date does not exceed a maximum of 90 days.
+3.  If a valid score is found (either exact or tolerant), it is assigned as the target (y) to the corresponding window.
+4.  If no score is found within the tolerance margin, the window is discarded to avoid unreliable labels.
+
+ESG scores are usually updated quarterly, so there may be a natural lag between daily news and official ratings. Allowing a margin of up to 90 days ensures temporal coherence without losing a significant amount of data, maximizing the use of the available dataset to train robust models.
+
+Example: (The example from the notebook would be inserted here if available in a structured format)
+
+#### iv. Validation and Export
+Upon completion of the matching, all windows that have not been associated with a valid ESG score are filtered out, removing incomplete entries from the dataset. Random inspections are performed to validate that the matches are correct and coherent (e.g., reviewing tickers, categories, and matched dates).
+
+Finally, the complete dataset is exported in .pkl format under the name ESG\_TRAIN\_READY\_2.pkl. This file includes:
+
+* **X:** the matrices corresponding to the temporal windows (90 days × number of features).
+* **y:** the matched ESG scores (one per window).
+* **tickers:** company identifiers.
+* **categories:** ESG categories (E, S, or G).
+* **target\_dates:** target dates of the windows.
+
+This dataset constitutes the definitive basis for the training of the prediction model, allowing for validations and backtests with real and correctly matched data.
+
+The precise matching between windows and ESG scores ensures that the predictive model works with consistent data and verified labels. The tolerant matching strategy balances the need for temporal precision with the practicality of maximizing the volume of available data, a key aspect for strengthening supervised learning. With this step, the preprocessing phase is closed, and a clean, complete, and structured dataset is available to proceed with the training and evaluation of the model.
+
+### d. Training
+Notebook: 15\_LSTM\_TRAINNING.ipynb
+
+This phase aims to train a Long Short-Term Memory (LSTM) recurrent neural network model, whose objective is to predict daily ESG scores from the previously generated temporal windows. The LSTM architecture is selected for its ability to capture complex temporal patterns and manage long-term dependencies in sequences, something crucial in the media evolution of ESG indicators.
+
+#### i. Data Loading and Preparation
+The model is trained on the ESG\_TRAIN\_READY\_2.pkl dataset, which contains:
+
+* **X:** 90-day temporal windows × number of features. Each window contains the daily characteristics (embeddings + cluster).
+* **y:** official ESG scores associated with each window.
+* **tickers, categories, target\_dates:** metadata for traceability.
+
+Before feeding the model, Min-Max normalization is applied to the data, ensuring that all input values are within a [0, 1] range. This technique is key to accelerating model convergence and avoiding scaling issues between variables.
+
+A 70%-30% train-test split is performed to evaluate the model's generalization capacity, ensuring that no information leakage occurs between the sets. The separation was performed using `train_test_split`, stratifying randomly to maintain the representativeness of the ESG score distribution in each subset. To facilitate efficient data loading, the ESGDataset class was defined, which converts the embedding matrices and scores into PyTorch tensors, with support for CPU and GPU devices.
+
+#### ii. LSTM Architecture Design
+The constructed model, named ESG\_LSTM, was designed to effectively capture the temporal and semantic dynamics of ESG news. The architecture consists of several functional blocks:
+
+* **Input:** Each input has the shape (batch\_size, 90, 101), where 90 represents the consecutive days and 101 the daily features (embeddings + cluster).
+* **LSTM:** an LSTM with the following characteristics was implemented:
+    * Two layers (`num_layers=2`), which increases the model's capacity to capture hierarchical dependencies in the sequence.
+    * 128 hidden units per layer (`hidden_dim=128`).
+    * Bidirectional configuration: this configuration allows the network to process the sequence both in the direct temporal direction (past → future) and in the reverse direction (future → past), thus capturing patterns that could manifest in both senses.
+* **Dropout:**
+    * Regularization was applied using `Dropout(0.3)` after the LSTM output, thus reducing the risk of overfitting.
+* **Feedforward:**
+    * Intermediate dense layer (`Linear(256, 128)`) followed by a ReLU activation function.
+    * Final output layer (`Linear(128, 1)`) to produce a single continuous ESG score value.
+
+This architecture is designed to maximize the model's ability to capture the dynamics of ESG events over time, incorporating redundancy through bidirectionality and regularization techniques to improve its generalization.
+
+#### iii. Training Configuration
+The training is executed for multiple epochs (adjustable based on the results obtained), iterating through the dataset using DataLoaders that optimize batch loading. In each iteration, the training and validation loss are recorded to monitor the process and avoid overfitting.
+
+* **Loss function:** MSELoss (mean squared error), which is the standard option for continuous regression problems. This function quadratically penalizes deviations between the prediction and the real value, being especially effective in avoiding large errors.
+* **Optimizer:** Adam with a learning rate of 1e-3, which provides automatic learning rate adaptation per parameter.
+* **Number of epochs:** 20.
+* **Batch size:** 64.
+* **Device:** GPU (cuda) when available.
+
+Random seeds are fixed in NumPy and PyTorch (SEED=33) to ensure the reproducibility of the results. In addition, PyTorch was configured in deterministic mode to avoid variations between executions.
+
+During each epoch:
+
+* The model is trained on the training set (`train_loader`).
+* After each epoch, it is evaluated on the validation set (`val_loader`).
+* The average loss in training and validation is calculated.
+* If the validation loss improves compared to the previous best (`best_val_loss`), the model is saved to disk (`best_model.pth`).
+
+This procedure replicates a manual early stopping scheme, seeking to preserve generalization without the need to go through an excessive number of epochs.
+
+#### iv. Evaluation
+Once the training was completed, the best model was loaded and evaluated on the test set using the metrics: Mean Squared Error (MSE) and R² Score.
+
+The MSE is a standard metric in regression problems that measures the average of the squared differences between the predictions and the actual values. Mathematically, it is expressed as:
+
+$$
+MSE = \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2
+$$
+
+An MSE of 0.85 indicates that, on average, the model's predictions have a very low quadratic error with respect to the real ESG scores. Although the MSE penalizes large errors more (due to its quadratic nature), the result obtained confirms that the model does not make large deviations and that its precision is consistent even in extreme cases. In an ESG prediction context, a low error implies that the generated scores are very close to the official evaluations, which reinforces the model's reliability as a support tool for sustainable strategies and responsible investment.
+
+The R² Score, also known as the coefficient of determination, measures the proportion of the variance in the dependent variable that is explainable by the independent variables. It is calculated as:
+
+$$
+R^2 = 1 - \frac{SS_{res}}{SS_{tot}}
+$$
+
+where:
+
+* $SS_{res}$ is the sum of the squared residuals.
+* $SS_{tot}$ is the total sum of squares.
+
+An R² of 0.986 implies that 98.6% of the observed variance in the official ESG scores is being explained by the model. This value is very close to the maximum possible value (1.0), which confirms that the model captures the relationships and temporal patterns present in the data with very high precision. The fact that almost all of the variance is explained means that the model not only fits the known data well but also has high predictive power over new data. In financial applications, this is especially important because it suggests that the model can be used to monitor and anticipate ESG dynamics robustly.
+
+Test MSE (real): 0.85
+Test R² (real): 0.986
+Sample of ESG predictions vs. actual scores on the test set:
+Predicted: 66.52 | Actual: 66.14 | Absolute Error: 0.38
+Predicted: 57.65 | Actual: 56.87 | Absolute Error: 0.78
+Predicted: 47.30 | Actual: 45.81 | Absolute Error: 1.49
+Predicted: 72.68 | Actual: 73.46 | Absolute Error: 0.78
+
+## 11. CREATION OF A COMPLETE DATASET
+Notebook: 16\_COMPLETE\_DATASET.ipynb
+
+The inference phase results in a set of predictions which, when added to the official ESG scores, form an almost complete dataset. We perform a series of actions on this dataset, which I explain below.
+
+### a. Theoretical Basis
+In practice, official ESG scores are usually published quarterly or annually, leaving significant temporal gaps in data coverage. To overcome this limitation, a system has been designed where the daily predictions generated by the LSTM model fill these gaps, ensuring a continuous time series. This approach is fundamental to providing an updated and granular view of ESG evolution, something increasingly demanded in the financial and sustainability fields.
+
+The final dataset includes an explicit distinction between data from official sources and those generated by prediction, ensuring data transparency and traceability.
+
+### b. Data Loading and Preparation
+The following datasets were loaded:
+
+* `NEWS_+_PRESS_ESG_definitivo.csv`: Dataset of processed news and press releases.
+* `DF_SUMMARY.csv`: Statistical summary of each company.
+* `EMBEDDINGS.pkl`: Daily embeddings of ESG events by company and category.
+* `DAILY_ESG_PREDICTIONS.csv`: Predictions of ESG scores based on 90-day windows.
+* `ESG_SCORES.csv`: Historical official ESG scores of the analyzed companies.
+
+### c. Generation of New 7-Day Windows
+To complement the predictions based on 90-day windows, 7-day windows of embeddings are also generated:
+
+* The `generate_windows_with_padding` function is used to create 7-day windows with up to 20% padding allowed (i.e., at least 6 real data days).
+* For each window, the closest predicted score is searched for within a range of ±3 days from the end of the window.
+* This process allows increasing the temporal granularity of the predictions, improving the daily coverage of available scores.
+
+A dataset `X_lstm` is created with the 7-day windows, and their corresponding labels `y_lstm` obtained from the previous predictions.
+
+### d. Training of a New LSTM Model
+For these new 7-day windows, an additional LSTM model was trained following the same structure as the previous one. This model yielded the following results on the test set:
+
+Test MSE: 0.4569
+Test R²: 0.9917
+
+
+Once the predictions based on 90-day windows and those generated with 7-day windows are available, both sources are unified to maximize temporal coverage.
+
+### e. Filtering of Companies and Categories
+To ensure that the final dataset had adequate quality, filtering criteria were applied:
+
+* Each company was required to have at least 100 days of available predictions per ESG category.
+* In addition, each company had to have at least two ESG categories with minimum coverage.
+
+### f. Interpolation of Official Scores and Predictions
+Since not all dates had predictions or official scores, a specific procedure was designed to build complete time series:
+
+* **Before the first available prediction for a company and category:**
+    * Official scores (`ESG_SCORES.csv`) were used.
+    * Forward-fill (ffill) interpolation was applied for days without an explicit value.
+* **From the first prediction onwards:**
+    * Predictions from the LSTM model were used.
+    * If a prediction existed for a given date, the prediction was used.
+    * If no prediction existed for a specific day after the first event, the last predicted value was maintained.
+* For each date and company-category, it was recorded whether the value came from a prediction (`from_official = False`) or an official score (`from_official = True`).
+
+This procedure ensures that each company has an uninterrupted daily ESG score throughout the 2020–2025 period. The `fill_esg_scores_filtered` function implements this mechanism, generating a final DataFrame `df_esg_final_5y`.
+
+### g. Final Dataset Generated
+The final dataset contains:
+
+* **Ticker:** Company identifier.
+* **Date:** Corresponding day.
+* **ESG Category:** Environmental, Social, or Governance.
+* **Daily ESG Score (`predicted_score_final`):** Prediction or interpolated value.
+* **Source Indicator (`from_official`):** True if the value comes from an official score, False if it comes from an LSTM prediction.
+
+The dataset was stored in `ESG_SCORES_COMPLETOS_2.csv`, serving as the definitive basis for subsequent analyses and for the design of investment strategies based on the evolution of ESG factors.
+
+Notebook: 17\_COMPLETE\_DATASET\_2.ipynb
+
+Finally, each generated temporal window (with a size of 7 days) is associated with its corresponding target ESG score, thus ensuring the correct alignment between the input sequences and the output values for supervised training. To do this, a matching procedure is implemented that, for each window, searches for the closest ESG score in time within a tolerance margin of 3 days. This margin has been defined to allow for slight temporal flexibility that mitigates possible mismatches in publication dates or the availability of predictions, without compromising the accuracy of the matching. If multiple candidates exist within that temporal range, the one with the smallest temporal distance to the analyzed window is selected.
+
+This step is fundamental to ensure that each input sequence is precisely matched with its respective target, which optimizes the quality and reliability of supervised learning in later phases. Furthermore, this procedure strengthens the internal consistency of the dataset by minimizing the risk of errors arising from temporal lags, a critical aspect when working with time series and financial data sensitive to temporal context.
+
+## 12. DEVELOPMENT OF A TRADING ALGORITHM
+Notebook: 18\_TRADING\_ALGO.ipynb
+
+This section describes in detail the design, construction, implementation, and validation of a trading system based on the evolution of dynamic ESG scores and classified news events. The main objective was to develop a systematic investment approach that, based on signals extracted from the ESG behavior of companies, could make buy and sell decisions with objective, replicable, and quantifiable criteria.
+
+### a. Data Loading and Preparation
+To feed the trading system, three main datasets are used:
+
+* **ESG News (`news`):** Included events classified as environmental, social, or governance, along with sentiment analysis.
+* **Market Prices (`prices`):** Daily information on closing prices, volume, and other financial indicators of the analyzed companies.
+* **Daily ESG Scores (`esg_scores`):** Previously generated dataset that combined predictions made using LSTM networks with interpolations of historical official scores.
+
+All datasets must be correctly aligned in time and transformed to datetime format to ensure consistent and safe operations during the algorithm's execution.
+
+### b. Modular Design of the Trading System
+The system was structured in a modular way, using three main components:
+
+#### 1) Signal Generation (SignalEngine)
+The `SignalEngine` class constitutes the first functional block of the trading system and aims to generate quantitative and qualitative signals based on the daily evolution of ESG scores and the classified news events for each company. This module is crucial because it transforms data into objective operational indicators on which subsequent investment decisions are based.
+
+The constructor of the class (`__init__`) receives as arguments the daily ESG scores dataset, the classified news dataset, and the ESG category to operate on (Environmental, Social, or Governance). Additionally, it allows adjusting several essential technical parameters for signal calculation, such as the momentum window (5 days by default), the Z-Score window (20 days), and the percentile window for ESG level classification (90 days). The inclusion of these parameters ensures the system's flexibility, allowing it to be easily adapted to different time horizons or sectors.
+
+The central method of the class is `get_signals_for_day(date)`. This method processes the information corresponding to a specific date and constructs, for each company, a set of quantitative and qualitative signals. The first part of the analysis focuses on ESG scores. Four key indicators are calculated: momentum, which measures the variation of the score with respect to a recent moving window and captures the company's trend in ESG terms; the Z-Score, which evaluates how extreme the current score is in relation to its historical mean and standard deviation; and moving percentiles (P30 and P70), which classify each score into low, medium, or high levels based on its relative position in the historical distribution. This last point is fundamental to identify structural situations such as companies persistently lagging or excelling in sustainability.
+
+In parallel, the day's news is analyzed and labeled according to its predicted sentiment (bullish, bearish, neutral), transforming them into interpretable qualitative categories: ‘very\_positive’, ‘very\_negative’, or ‘neutral’. This classification allows capturing the emotional tone or the potential impact that news can have on the ESG perception of companies.
+
+The final result is a structured dictionary in which each company (ticker) is associated with a set of key signals: `evento_extremo`, `desacoplamiento`, `momentum`, `zscore`, and the corresponding ESG category. This format allows the direct integration of the signals in the next phase of the system, facilitating the evaluation and execution of trading decisions.
+
+In short, `SignalEngine` plays a strategic role within the global system, acting as the brain that transforms unstructured data into high-quality operational indicators. Its modular and flexible design ensures that it can be applied simultaneously to different ESG categories or expanded to incorporate new signal logics in the future. Furthermore, the combination of statistical techniques (such as percentiles and Z-Score) with the semantic interpretation of news offers a robust and sophisticated approach that seeks to minimize bias and maximize the relevance of the generated signals.
+
+#### 2) Signal Evaluation (SignalEvaluator)
+The `SignalEvaluator` class represents the second fundamental piece within the modular ESG signal-based trading system. Its main function is to translate the individual signals generated by the `SignalEngine` module into a single aggregated signal and, based on this, determine the specific operational decision: buy, sell, or hold. This process is key to the system's operability, as it converts multiple scattered metrics into a single clear and quantifiable guideline, suitable for automated execution.
+
+The constructor of the class (`__init__`) allows customizing the weights assigned to each type of signal, distinguishing between the three ESG categories: Environmental, Social, and Governance. By default, the weighting is defined in a balanced way for the three categories, giving greater importance to the extreme event (40%), followed by decoupling (30%), momentum (20%), and finally the Z-Score (10%). This initial configuration responds to the logic that very positive or very negative news usually has a more immediate and decisive impact on a company's ESG perception, while quantitative signals such as momentum or Z-Score provide additional nuances to the evaluation. However, the class architecture is designed to be easily adjustable, allowing these weights to be adapted based on backtests or specific user preferences.
+
+The `calcular_signal_final` method is the functional core of the class. For each row (company/day) of the received DataFrame, this method extracts the associated ESG category and applies the weighted combination of signals according to the defined weights. Each type of signal (extreme event, decoupling, momentum, and Z-Score) is multiplied by its corresponding weight, accumulating to obtain a single final signal. This process ensures that the evaluation is consistent and structured, integrating both qualitative and quantitative information into a single continuous value.
+
+Subsequently, the `decision_operativa` method translates this final signal into a discrete operational decision. The logic used is simple but effective: if the final signal exceeds a positive threshold (by default, +0.25), a buy signal (1) is generated; if it falls below a negative threshold (–0.25), a sell signal (–1) is issued; and if it remains within the intermediate range, the recommendation is to maintain the current position (0). This threshold-based policy allows filtering weak or noisy signals and focusing only on those situations where the confidence in the signal is high enough to justify an action.
+
+In summary, `SignalEvaluator` acts as the decision-making body of the trading system, synthesizing the multiple ESG signals into a clear and calibrated operational guideline.
+
+#### 3) Order Execution (SignalExecutor)
+The `SignalExecutor` class constitutes the third and final pillar of the modular trading system, being responsible for materializing trading decisions into concrete buy and sell operations, simulating the realistic execution of orders in the financial market. Its design is oriented towards reproducing real market conditions as faithfully as possible, including considerations such as commissions, slippage, and active portfolio management.
+
+From a functional point of view, the constructor (`__init__`) establishes the key parameters of the simulation, such as the initial capital available (default 1 million euros), the maximum exposure per asset (25% of capital), and the costs associated with operations: commissions (0.1%), stop-loss (30%), and slippage (0.1%). These values have been defined to reflect realistic institutional investment scenarios, although their design allows complete customization to adapt to different risk profiles or operational contexts.
+
+The `portfolio` attribute maintains the updated record of open positions for each asset, while `buy_prices` stores the purchase prices, crucial for correctly calculating stop-loss activation. In addition, each trade is recorded in the `trades` list, and the historical evolution of the portfolio is stored in `history`. The class also maintains the `pending_signals` variable, which saves the signals generated today to be executed in the next session, thus simulating the natural delay between signal generation and its real execution.
+
+The `_execute_order` function implements the operational logic for each individual order. When a buy signal (signal == 1) is detected, the algorithm calculates the amount to invest based on the available capital and the maximum exposure per asset, adjusting this amount by the "score" confidence of the signal (this introduces a very relevant dynamic nuance). The number of shares is calculated in whole numbers (no fractions), and it is verified if sufficient capital is available to cover the operation including commissions. If conditions are favorable, the purchase is made, and the positions and available capital are updated. In the case of a sell signal (signal == -1), the system implements a random partial sale (between 60% and 80% of the position), reflecting the operational reality where the complete position is rarely liquidated except in cases of force majeure. Forced sales due to stop-loss are also considered to protect the portfolio against abrupt price drops.
+
+The `update_daily` method represents the operational core of the class and simulates the complete daily trading cycle. First, it executes the pending signals that were registered the previous day, applying the corresponding slippage to approximate the real execution price. Subsequently, it stores the new signals generated that same day to be executed in the next session, thus simulating a realistic flow of deferred orders. Next, it daily reviews all open positions to verify if any have reached the stop-loss threshold, in which case it automatically executes the sale. Finally, it updates the total value of the portfolio (adding available cash plus the market value of open positions) and records it in the history.
+
+A notable feature is the precision with which the portfolio value is calculated: for each open position, the closing price of the asset in the market that day is consulted and multiplied by the number of shares in the portfolio, thus allowing the daily evolution of the assets to be monitored.
+
+In addition, the class includes the `get_history_df` and `get_trades_df` methods, which facilitate the structured export of operational results. `get_trades_df` adds valuable information such as the gross and net calculation of each operation (considering commissions), which allows detailed financial analyses to be performed such as the calculation of the portfolio turnover ratio, the total cost of friction, or the profitability adjusted for operating costs.
+
+Overall, `SignalExecutor` acts as the transactional engine of the system, transforming signals into concrete actions and dynamically managing the portfolio over time. Its modular design and attention to detail (slippage, stop-loss, maximum exposure, deferred execution) provide a robust and realistic simulation that allows evaluating the operational viability and profitability of the ESG strategy under plausible market conditions. Furthermore, by maintaining a comprehensive record of all operations and their historical evolution, this class lays the foundation for rigorous post-trading analysis, essential in any professional process of backtesting and algorithmic optimization.
+
+#### 4) Function to Analyze Results
+The `analizar_resultados` function represents the post-operative analysis module of the trading system, whose objective is to exhaustively evaluate the performance of the implemented strategy. This function synthesizes in a single block all the necessary logic to calculate both standard financial metrics (such as profitability and risk) and specific indicators on the operations carried out (such as win rate or profit factor), allowing a rigorous and quantifiable evaluation of the results obtained.
+
+From a technical point of view, the function receives several key datasets: the daily portfolio history (`df_history`), the detailed trade log (`df_trades`), and optionally the daily prices (`df_prices`). The first fundamental operation is to ensure correct temporal alignment: if a price dataset is provided, historical records are filtered to retain only dates with valid prices, thus avoiding distortions due to days without market activity.
+
+Once the data is cleaned and ordered, the function calculates the daily return of the portfolio (`returns` column) through the percentage change in capital day by day. This constitutes the basis for deriving key metrics such as:
+
+* **Total Return:** the total accumulated return during the entire backtest period.
+* **Annualized Return:** the annualized rate of return, which normalizes profitability to a one-year period, allowing direct comparisons with benchmarks.
+* **Annualized Volatility:** a risk indicator calculated as the standard deviation of daily returns scaled by the square root of 252 (annual business days).
+* **Sharpe Ratio:** a classic measure of risk-adjusted performance that compares the excess return over the risk-free rate with volatility. This ratio is especially relevant to understand if the strategy generates value beyond simple market exposure.
+
+In addition, the function incorporates a comprehensive drawdown calculation: it measures the largest percentage decline from a historical peak in the evolution of capital. The `max_drawdown` metric quantifies the worst decline suffered, while `calmar_ratio` relates the annualized return to the magnitude of the drawdown, providing a risk/return balance complementary to the Sharpe Ratio.
+
+Another key aspect is the microstructural analysis of operations. To do this, the function pairs each sell operation with the last corresponding buy operation (matching by ticker and ESG category) and calculates the net profit (pnl) as well as the duration of the operation (`holding_days`). From these buy-sell pairs, fundamental operational statistics are derived:
+
+* Total number of operations and BUY vs SELL distribution.
+* **Win Rate:** proportion of closed operations with positive profit, a key metric to evaluate the effectiveness of the strategy.
+* **Profit Factor:** ratio of total gains to total losses, considered a robust measure of the overall efficiency of the strategy.
